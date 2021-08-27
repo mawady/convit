@@ -1,3 +1,13 @@
+# Modification
+
+- Finetune binary classification using pre-trained model
+- Edit evaluation for acc top 1 only
+
+# Commands
+
+- Train: python main.py --pretrained --batch-size 30 --output_dir /path/to/models --model convit_tiny --epochs 5 --data-path /path/to/dataset --nb_classes 2 --nb_classes_pre 1000
+- Eval: python main.py --eval --model convit_tiny --resume /path/to/models/checkpoint.pth --data-path /path/to/dataset --nb_classes 2 --nb_classes_pre 1000
+
 # ConViT : Vision Transformers with Convolutional Inductive Biases
 
 This repository contains PyTorch code for ConViT. It builds on code from the [Data-Efficient Vision Transformer](https://github.com/facebookresearch/deit) and from [timm](https://github.com/rwightman/pytorch-image-models).
@@ -44,26 +54,31 @@ The directory structure is the standard layout for the torchvision [`datasets.Im
 ```
 
 ## Evaluation
+
 To evaluate ConViT-Ti on ImageNet test set, run:
+
 ```
 python main.py --eval --model convit_tiny --pretrained --data-path /path/to/imagenet
 ```
 
 This should give
+
 ```
 Acc@1 73.116 Acc@5 91.710 loss 1.172
 ```
 
 ## Training
+
 To train ConViT-Ti on ImageNet on a single node with 4 gpus for 300 epochs run:
 
 ```
 python -m torch.distributed.launch --nproc_per_node=4 --use_env main.py --model convit_tiny --batch-size 256 --data-path /path/to/imagenet
 ```
 
-To train the same model on a subsampled version of ImageNet where we only use 10% of the images of each class, add ```--sampling_ratio 0.1```
+To train the same model on a subsampled version of ImageNet where we only use 10% of the images of each class, add `--sampling_ratio 0.1`
 
 ## Multinode training
+
 Distributed training is available via Slurm and [submitit](https://github.com/facebookincubator/submitit):
 
 ```
@@ -71,9 +86,11 @@ pip install submitit
 ```
 
 To train ConViT-base on ImageNet on 2 nodes with 8 gpus each for 300 epochs:
+
 ```
 python run_with_submitit.py --model convit_base --data-path /path/to/imagenet
 ```
 
 # License
+
 The majority of this repository is released under the Apache 2.0 license as found in the [LICENSE](LICENSE) file.
