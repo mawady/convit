@@ -411,27 +411,29 @@ def main(args):
     dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
     dataset_val, _ = build_dataset(is_train=False, args=args)
 
-    if True:  # args.distributed:
-        num_tasks = utils.get_world_size()
-        global_rank = utils.get_rank()
-        if args.repeated_aug:
-            sampler_train = RASampler(
-                dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
-            )
-        else:
-            sampler_train = torch.utils.data.DistributedSampler(
-                dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
-            )
-    else:
-        sampler_train = torch.utils.data.RandomSampler(dataset_train)
+    # if True:  # args.distributed:
+    #     num_tasks = utils.get_world_size()
+    #     global_rank = utils.get_rank()
+    #     if args.repeated_aug:
+    #         sampler_train = RASampler(
+    #             dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
+    #         )
+    #     else:
+    #         sampler_train = torch.utils.data.DistributedSampler(
+    #             dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
+    #         )
+    # else:
+    #     sampler_train = torch.utils.data.RandomSampler(dataset_train)
 
-    # print(np.unique(dataset_train.targets, return_counts=True))
-    # class_counts = np.bincount(labels)
-    # num_samples = sum(class_counts)
-    # class_weights = [num_samples/class_counts[i] for i in range(len(class_counts))]
-    # weights = [class_weights[labels[i]] for i in range(int(num_samples))]
-    # sampler = torch.utils.data.WeightedRandomSampler(torch.DoubleTensor(weights), int(num_samples))
-    # return
+    class_counts = np.unique(dataset_train.targets, return_counts=True)[1]
+    num_samples = sum(class_counts)
+    labels = dataset_train.targets
+    class_weights = [num_samples / class_counts[i] for i in range(len(class_counts))]
+    weights = [class_weights[labels[i]] for i in range(int(num_samples))]
+    sampler_train = torch.utils.data.sampler.WeightedRandomSampler(
+        torch.DoubleTensor(weights), int(num_samples)
+    )
+
     data_loader_train = torch.utils.data.DataLoader(
         dataset_train,
         sampler=sampler_train,
@@ -573,6 +575,13 @@ def main(args):
         )
 
         lr_scheduler.step(epoch)
+
+        test_stats = evaluate(data_loader_val, model, device)
+        print(
+            f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%"
+        )
+        
+
         if args.output_dir:
             checkpoint_paths = [output_dir / "checkpoint.pth"]
             if args.save_every is not None:
@@ -580,24 +589,21 @@ def main(args):
                     checkpoint_paths.append(
                         output_dir / "checkpoint_{}.pth".format(epoch)
                     )
-            for checkpoint_path in checkpoint_paths:
-                utils.save_on_master(
-                    {
-                        "model": model_without_ddp.state_dict(),
-                        "optimizer": optimizer.state_dict(),
-                        "lr_scheduler": lr_scheduler.state_dict(),
-                        "epoch": epoch,
-                        "model_ema": get_state_dict(model_ema) if model_ema else None,
-                        "args": args,
-                    },
-                    checkpoint_path,
-                )
-
-        test_stats = evaluate(data_loader_val, model, device)
-        print(
-            f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%"
-        )
-        max_accuracy = max(max_accuracy, test_stats["acc1"])
+            if (max_accuracy < test_stats["acc1"]):
+                print("Better acc found: {} --> {}. Saving a model ...".format(max_accuracy, test_stats["acc1"]))
+                max_accuracy = test_stats["acc1"]
+                for checkpoint_path in checkpoint_paths:
+                    utils.save_on_master(
+                        {
+                            "model": model_without_ddp.state_dict(),
+                            "optimizer": optimizer.state_dict(),
+                            "lr_scheduler": lr_scheduler.state_dict(),
+                            "epoch": epoch,
+                            "model_ema": get_state_dict(model_ema) if model_ema else None,
+                            "args": args,
+                        },
+                        checkpoint_path,
+                    )
         print(f"Max accuracy: {max_accuracy:.2f}%")
 
         nonlocality = {}
